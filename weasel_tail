@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+import tty
+import sys
+
+
+
+# argument settings
+if len(sys.argv) < 2:
+	print('usage: ./weasel_tail "command to run" [log-file]')
+	sys.exit(1)
+
+tailed_command = sys.argv[1]
+if len(sys.argv) > 2:
+	tee_command = ' | tee -a ' + sys.argv[2]
+else:
+	tee_command = ''
+
+# other settings
+console_width = os.get_terminal_size().columns
+log_length = 10
+
+# wrap to catch sigint
+try:
+	# run the command with pipefail on
+	proc = subprocess.Popen('bash -o pipefail -c "' + tailed_command + ' 2>&1' + tee_command + '"',
+			shell=True,
+			stdout=subprocess.PIPE,
+			stderr=subprocess.PIPE,
+			universal_newlines=True)
+
+	last_lines = []
+
+	# read output line by line
+	for line in iter(proc.stdout.readline, ""):
+		line = line.replace('\n', '')
+
+		if len(last_lines) > 0:
+			print("\033[" + str(len(last_lines)) + "A", end='')
+
+		if len(line) > console_width:
+			line = line[:console_width]
+		last_lines.append(line)
+		if len(last_lines) > log_length:
+			last_lines = last_lines[1:]
+		for l in last_lines:
+			print("\033[K" + l)
+
+	# wait for status
+	status = proc.wait()
+
+	# if success, erase output and print ok
+	if status == 0:
+		for i in range(len(last_lines)):
+			print("\033[1A\033[K", end='')
+		print("ok!")
+
+	# exit with status code
+	sys.exit(status)
+except KeyboardInterrupt:
+	sys.exit(1)
+
+
+
