@@ -8,6 +8,13 @@ A utility to tail a given command, then hide the output after the command succee
 Useful when you have multiple build steps and each step produces a ton of predictable output.
 You only need to know the output if it fails. :)
 
+## Weasel
+`./weasel build deploy`
+
+A miniature build system compatible with `make`.
+It folds output after every command is completed to prevent littering the console.
+Useful when you have many many build steps and don't want to see anything but a simple `ok!` at the end of each one.
+
 ## Daemonize.sh
 `./daemonize.sh server_user ./run-server.sh /app/log/server.log /app/server-input.pipe`
 
