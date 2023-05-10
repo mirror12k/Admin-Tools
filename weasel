@@ -3,20 +3,37 @@
 import os
 import sys
 import subprocess
-import tty
 import re
-import shutil
+import argparse
+import math
 
 
 
 local_vars = {}
+recording_file = None
+filter_secrets = True
 
 if sys.stdout.isatty():
 	istty = True
 	console_width = os.get_terminal_size().columns
 else:
 	istty = False
-# console_width = shutil.get_terminal_size(fallback=(200, 50)).columns
+
+def calculate_shannon_entropy(s):
+	entropy = 0.0
+	s = re.sub(r'\s+', '', s)
+	for x in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-+/':
+		p_x = float(s.count(x)) / len(s)
+		if p_x > 0:
+			entropy += - p_x * math.log(p_x, 2)
+	if len(s) > 2:
+		entropy -= 1.2 / math.log(len(s), 2)
+	return entropy
+
+def filter_secrets_from_string(s):
+	if len(s) > 8 and calculate_shannon_entropy(s) > 4.5:
+		return re.sub(r'[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_\-+/]', '*', s)
+	return s
 
 def strip_comments(lines):
 	return [ s[:s.index('#')] if '#' in s else s for s in lines ]
@@ -83,8 +100,13 @@ def execute_shell_command(command, log_length=40):
 
 	# read output line by line
 	for line in iter(proc.stdout.readline, ""):
+		if recording_file is not None:
+			recording_file.write(line)
+
 		if istty:
 			line = line.replace('\n', '')
+			if filter_secrets:
+				line = filter_secrets_from_string(line)
 
 			if len(last_lines) > 0:
 				print("\033[" + str(len(last_lines)) + "A", end='')
@@ -145,12 +167,21 @@ def execute_makefile_commands(commands):
 				sys.exit(status)
 
 
-
 # wrap to catch sigint
 try:
+	# parse arguments
+	parser = argparse.ArgumentParser(prog='weasel', description='An obscureful build tool')
+	parser.add_argument('targets', metavar='target', type=str, nargs='+',
+						help='list of targets to run')
+	parser.add_argument('-o', '--output')
+	args = parser.parse_args()
+
+	# print("output:", args.output, ", targets:", args.targets)
+	if args.output is not None:
+		recording_file = open(args.output, 'a')
+
 	groups = load_makefile('Makefile')
-	for arg in sys.argv[1:]:
-		print('weasel ' + arg)
+	for arg in args.targets:
 		execute_makefile_commands(groups[arg])
 	sys.exit(0)
 
